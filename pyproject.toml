@@ -37,7 +37,9 @@ paddleocr = [
 ]
 markdown = [
     "markdown>=3.4.0",
-    "weasyprint>=60.0",
+    # weasyprint requires libcairo / GTK which is not available on Windows;
+    # skip it there so `pip install raganything[markdown]` succeeds on win32.
+    "weasyprint>=60.0 ; sys_platform != 'win32'",
     "pygments>=2.10.0",
 ]
 all = [
@@ -46,7 +48,8 @@ all = [
     "paddleocr>=2.7.0",
     "pypdfium2>=4.25.0",
     "markdown>=3.4.0",
-    "weasyprint>=60.0",
+    # weasyprint requires libcairo / GTK which is not available on Windows.
+    "weasyprint>=60.0 ; sys_platform != 'win32'",
     "pygments>=2.10.0",
 ]
 
