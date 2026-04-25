@@ -70,12 +70,14 @@ extras_require = {
         "paddleocr>=2.7.0",
         "pypdfium2>=4.25.0",
         "markdown>=3.4.0",
-        "weasyprint>=60.0",
+        # weasyprint requires libcairo/GTK not available on Windows
+        'weasyprint>=60.0 ; sys_platform != "win32"',
         "pygments>=2.10.0",
     ],  # All optional features
     "markdown": [
         "markdown>=3.4.0",
-        "weasyprint>=60.0",
+        # weasyprint requires libcairo/GTK not available on Windows
+        'weasyprint>=60.0 ; sys_platform != "win32"',
         "pygments>=2.10.0",
     ],  # Enhanced markdown conversion
 }
