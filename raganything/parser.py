@@ -936,6 +936,19 @@ class MineruParser(Parser):
                             elif new_name in item and old_name not in item:
                                 item[old_name] = item[new_name]
 
+                # Normalize MinerU CategoryType integer values to string type names.
+                # MinerU emits "type" as an IntEnum value (e.g. 3 for figure, 5 for
+                # table) rather than a human-readable string, which causes content
+                # separation to misclassify every block as "unknown" (issues #6, #21).
+                # Import lazily to avoid a circular dependency at module load time.
+                from .utils import _normalize_content_type  # noqa: PLC0415
+
+                for item in content_list:
+                    if isinstance(item, dict) and "type" in item:
+                        raw_type = item["type"]
+                        if not isinstance(raw_type, str):
+                            item["type"] = _normalize_content_type(raw_type)
+
                 # Always fix relative paths in content_list to absolute paths
                 cls.logger.info(
                     f"Fixing image paths in {json_file} with base directory: {images_base_dir}"

@@ -10,11 +10,80 @@ from pathlib import Path
 from lightrag.utils import logger
 
 
+# ---------------------------------------------------------------------------
+# MinerU CategoryType → canonical string name mapping
+# ---------------------------------------------------------------------------
+# MinerU encodes content types as integer enum values (CategoryType).  When
+# the content_list JSON is loaded the "type" field may be an int instead of
+# a human-readable string, causing _separate_content to misclassify every
+# block as "unknown" (refs: issues #6, #21).
+#
+# Mapping based on magic-pdf / MinerU source (CategoryType IntEnum):
+#   0  title                → text
+#   1  plain_text / text    → text
+#   2  abandon              → text  (headers, footers, page numbers)
+#   3  figure               → image
+#   4  figure_caption       → text
+#   5  table                → table
+#   6  table_caption        → text
+#   7  table_footnote       → text
+#   8  isolate_formula      → equation
+#   9  formula_caption      → text
+#  10  inline_formula       → text  (MinerU 2.x)
+#  11+ (future / unknown)  → text  (safe default)
+#
+# The mapping converts numeric values to the three multimodal types that
+# RAG-Anything has dedicated processors for ("image", "table", "equation").
+# Everything else is treated as plain text.
+_MINERU_INT_TYPE_MAP: Dict[int, str] = {
+    0: "text",      # title
+    1: "text",      # plain_text
+    2: "text",      # abandon (headers / footers)
+    3: "image",     # figure
+    4: "text",      # figure_caption
+    5: "table",     # table
+    6: "text",      # table_caption
+    7: "text",      # table_footnote
+    8: "equation",  # isolate_formula / interline_equation
+    9: "text",      # formula_caption
+    10: "text",     # inline_formula
+}
+
+
+def _normalize_content_type(raw_type: Any) -> str:
+    """Normalise a raw ``"type"`` value from a MinerU content-list item.
+
+    MinerU may emit either a human-readable string (``"text"``, ``"image"``,
+    …) or an integer ``CategoryType`` enum value.  This function converts
+    integers to their canonical string equivalents and passes strings through
+    unchanged (lowercased for safety).
+
+    Unknown integer values are treated as ``"text"`` (safest default) and a
+    debug message is emitted so the caller can investigate if needed.
+    """
+    if isinstance(raw_type, int):
+        mapped = _MINERU_INT_TYPE_MAP.get(raw_type)
+        if mapped is None:
+            logger.debug(
+                f"Unknown MinerU CategoryType integer {raw_type!r}; treating as 'text'"
+            )
+            return "text"
+        return mapped
+    if isinstance(raw_type, str):
+        return raw_type.lower()
+    # Fallback: unknown type representation
+    logger.debug(f"Unexpected content type value {raw_type!r}; treating as 'text'")
+    return "text"
+
+
 def separate_content(
     content_list: List[Dict[str, Any]],
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Separate text content and multimodal content
+
+    Handles MinerU output where the ``"type"`` field may be an integer
+    ``CategoryType`` enum value instead of a human-readable string.
 
     Args:
         content_list: Content list from MinerU parsing
@@ -26,7 +95,11 @@ def separate_content(
     multimodal_items = []
 
     for item in content_list:
-        content_type = item.get("type", "text")
+        raw_type = item.get("type", "text")
+        content_type = _normalize_content_type(raw_type)
+        # Write the normalised string back so downstream code sees a string
+        if raw_type != content_type:
+            item = {**item, "type": content_type}
 
         if content_type == "text":
             # Text content
