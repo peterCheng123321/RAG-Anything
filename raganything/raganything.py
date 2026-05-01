@@ -212,32 +212,57 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
         self.modal_processors = {}
 
         if self.config.enable_image_processing:
-            self.modal_processors["image"] = ImageModalProcessor(
-                lightrag=self.lightrag,
-                modal_caption_func=self.vision_model_func or self.llm_model_func,
-                context_extractor=self.context_extractor,
-            )
+            image_caption_func = self.vision_model_func or self.llm_model_func
+            if image_caption_func is None:
+                # Cannot process images without at least one callable model function.
+                # Emit a clear warning instead of creating a processor that will crash
+                # at runtime with "'NoneType' object is not callable" (issue #9).
+                self.logger.warning(
+                    "enable_image_processing=True but neither vision_model_func nor "
+                    "llm_model_func is set — image processing is disabled. "
+                    "Pass vision_model_func= (recommended) or llm_model_func= when "
+                    "constructing RAGAnything to enable image analysis."
+                )
+            else:
+                self.modal_processors["image"] = ImageModalProcessor(
+                    lightrag=self.lightrag,
+                    modal_caption_func=image_caption_func,
+                    context_extractor=self.context_extractor,
+                )
 
         if self.config.enable_table_processing:
-            self.modal_processors["table"] = TableModalProcessor(
-                lightrag=self.lightrag,
-                modal_caption_func=self.llm_model_func,
-                context_extractor=self.context_extractor,
-            )
+            if self.llm_model_func is None:
+                self.logger.warning(
+                    "enable_table_processing=True but llm_model_func is not set — "
+                    "table processing is disabled."
+                )
+            else:
+                self.modal_processors["table"] = TableModalProcessor(
+                    lightrag=self.lightrag,
+                    modal_caption_func=self.llm_model_func,
+                    context_extractor=self.context_extractor,
+                )
 
         if self.config.enable_equation_processing:
-            self.modal_processors["equation"] = EquationModalProcessor(
+            if self.llm_model_func is None:
+                self.logger.warning(
+                    "enable_equation_processing=True but llm_model_func is not set — "
+                    "equation processing is disabled."
+                )
+            else:
+                self.modal_processors["equation"] = EquationModalProcessor(
+                    lightrag=self.lightrag,
+                    modal_caption_func=self.llm_model_func,
+                    context_extractor=self.context_extractor,
+                )
+
+        # Always include generic processor as fallback (requires llm_model_func)
+        if self.llm_model_func is not None:
+            self.modal_processors["generic"] = GenericModalProcessor(
                 lightrag=self.lightrag,
                 modal_caption_func=self.llm_model_func,
                 context_extractor=self.context_extractor,
             )
-
-        # Always include generic processor as fallback
-        self.modal_processors["generic"] = GenericModalProcessor(
-            lightrag=self.lightrag,
-            modal_caption_func=self.llm_model_func,
-            context_extractor=self.context_extractor,
-        )
 
         self.logger.info("Multimodal processors initialized with context support")
         self.logger.info(f"Available processors: {list(self.modal_processors.keys())}")
