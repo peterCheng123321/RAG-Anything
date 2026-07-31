@@ -390,6 +390,14 @@ class BaseModalProcessor:
         self.hashing_kv = lightrag.llm_response_cache
         self.tokenizer = lightrag.tokenizer
 
+        # Compatibility shim: some LightRAG versions read
+        # global_config['hashing_kv'] inside extract_entities / merge_nodes_and_edges
+        # instead of using the llm_response_cache= keyword argument directly.
+        # asdict() serialises only simple dataclass fields and omits storage objects,
+        # so the key would be absent, causing KeyError: 'hashing_kv' (issue #167).
+        if "hashing_kv" not in self.global_config:
+            self.global_config["hashing_kv"] = self.hashing_kv
+
         # Initialize context extractor with tokenizer if not provided
         if context_extractor is None:
             self.context_extractor = ContextExtractor(tokenizer=self.tokenizer)
